@@ -18,6 +18,8 @@
 	//Table Prefix
 	$DB_WORDPRESS_PREFIX = 'wp_';
 	$DB_DRUPAL_PREFIX	 = '';
+	//Drupal users id (users.uid) to import. uid should be seperated by commas eg: '234,344,933'
+	$DRUPAL_USERS = '1909,2184, 1272, 1989, 1900, 1203, 2195, 1901, 1250, 1849, 1240, 2183, 1907, 1267, 1897, 1902, 1243, 1850, 1278, 1274, 1270, 218, 1266, 1213, 7, 2194, 1247, 1245, 1232, 1225, 1248, 1252, 218, 1266, 1213';
 
 	//Create Connection Array for Drupal and Wordpress
 	$drupal_connection		= array("host" => "localhost","username" => $DB_DP_USERNAME,"password" => $DB_DP_PASSWORD,"database" => $DB_DRUPAL);
@@ -48,6 +50,8 @@
 	$wc->query("TRUNCATE TABLE ".$DB_WORDPRESS_PREFIX."term_relationships");
 	$wc->query("TRUNCATE TABLE ".$DB_WORDPRESS_PREFIX."term_taxonomy");
 	$wc->query("TRUNCATE TABLE ".$DB_WORDPRESS_PREFIX."terms");
+	$wc->query("TRUNCATE TABLE ".$DB_WORDPRESS_PREFIX."users");
+	$wc->query("TRUNCATE TABLE ".$DB_WORDPRESS_PREFIX."usersmetadata");
 	message('Wordpress Table Truncated');
 	
 	//Get all drupal Tags and add it into worpdress terms table
@@ -73,6 +77,20 @@
 		$wc->query("INSERT INTO ".$DB_WORDPRESS_PREFIX."posts (id, post_author, post_date, post_content, post_title, post_excerpt, post_type, post_status) VALUES ('%s','%s','%s','%s','%s','%s','%s','%s')", $dp['id'], $dp['post_author'], $dp['post_date'], $dp['post_content'], $dp['post_title'], $dp['post_excerpt'], $dp['post_type'], $dp['post_status']);
 	}
 	message('Posts Updated');
+
+	//Get specific users from Drupal and add it into Wordpress users and usermeta table
+	$user_select = "SELECT DISTINCT users.uid, name, pass, mail, status FROM ".$DB_DRUPAL_PREFIX."users";
+	if($DRUPAL_USERS != '') $user_select .= "WHERE users.uid IN (".$DRUPAL_USERS.")";
+
+	$drupal_users = $dc->results($user_select);
+
+	foreach($drupal_users as $user)
+	{
+		$insert = $wc->query("INSERT INTO ".$DB_WORDPRESS_PREFIX."users (ID, user_login, user_pass, user_nicename, user_email, user_status, display_name) VALUES ('%s','%s','%s','%s','%s','%s','%s')", $user['uid'], $user['name'], $user['pass'], $user['name'], $user['mail'], '0', $user['name']);
+		$meta = $wc->query("INSERT INTO ".$DB_WORDPRESS_PREFIX."usermeta (user_id, meta_key, meta_value) VALUES ('%s','%s', '%s')", $user['uid'], $DB_WORDPRESS_PREFIX.'capabilities', 'a:1:{s:13:"administrator";b:1;}');
+		$meta = $wc->query("INSERT INTO ".$DB_WORDPRESS_PREFIX."usermeta (user_id, meta_key, meta_value) VALUES ('%s','%s', '%s')", $user['uid'], $DB_WORDPRESS_PREFIX.'user_level', '10');
+	}
+	message('Users added');
 
 	//Add relationship for post and tags
 	$drupal_post_tags = $dc->results("SELECT DISTINCT node.nid, taxonomy_term_data.tid FROM (".$DB_DRUPAL_PREFIX."taxonomy_index taxonomy_index INNER JOIN ".$DB_DRUPAL_PREFIX."taxonomy_term_data taxonomy_term_data ON (taxonomy_index.tid = taxonomy_term_data.tid)) INNER JOIN ".$DB_DRUPAL_PREFIX."node node ON (node.nid = taxonomy_index.nid)"); 
